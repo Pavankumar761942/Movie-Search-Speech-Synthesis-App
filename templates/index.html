@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Movie Finder</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <style>
+        /* Center the search box */
+        .search-container {
+            display: flex;
+            justify-content: flex-start;
+            align-items: flex-start;
+            height: 100vh;
+            flex-direction: column;
+            padding: 20px;
+        }
+
+        /* Style the search box */
+        .search-box {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            max-width: 600px;
+            border: 1px solid #dfe1e5;
+            border-radius: 24px;
+            padding: 5px 10px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+
+        .search-box input[type="text"] {
+            flex: 1;
+            border: none;
+            outline: none;
+            padding: 10px;
+            font-size: 18px;
+        }
+
+        .search-box button {
+            border: none;
+            background: none;
+            outline: none;
+            cursor: pointer;
+            font-size: 18px;
+            padding: 5px 10px;
+            margin-left: 10px;
+        }
+
+        /* Typing animation */
+        @keyframes typing {
+            from {
+                width: 0;
+            }
+            to {
+                width: 100%;
+            }
+        }
+
+        /* Listening animation */
+        @keyframes listening {
+            0% {
+                background-color: #007bff;
+            }
+            50% {
+                background-color: #5bc0de;
+            }
+            100% {
+                background-color: #007bff;
+            }
+        }
+
+        /* Apply animation to the button */
+        .listening {
+            animation: listening 1.5s infinite;
+        }
+
+        /* Apply animation to the input field */
+        input[type="text"].typing {
+            animation: typing 1s steps(20, end);
+        }
+    </style>
+</head>
+<body>
+    <div class="search-container">
+        <h1>Movie Finder</h1>
+        
+        <!-- Search box styled like Google's -->
+        <div class="search-box">
+            <input type="text" id="movie-input" placeholder="Type the movie name" onkeypress="handleKeyPress(event)">
+            <button id="search-button"><i class="fas fa-search"></i></button>
+            <button id="start-button"><i class="fas fa-microphone"></i></button>
+        </div>
+        
+        <!-- Display movie name -->
+        <p id="movie-name" class="mt-3"></p>
+        
+        <!-- Display movie information -->
+        <div id="movie-info" class="mt-3"></div>
+
+        <!-- Display movie image -->
+        <div id="movie-image" class="mt-3"></div>
+    </div>
+
+    <script>
+        const startButton = document.getElementById('start-button');
+        const searchButton = document.getElementById('search-button');
+        const movieInputElement = document.getElementById('movie-input');
+        const movieNameElement = document.getElementById('movie-name');
+        const movieImageElement = document.getElementById('movie-image');
+        const movieInfoElement = document.getElementById('movie-info');
+        const synth = window.speechSynthesis;
+        
+        // Azure Text-to-Speech endpoint configuration
+        const azureEndpoint = "https://eastus.api.cognitive.microsoft.com/";  // Replace with your Azure endpoint
+
+        // Function to handle search
+        function handleSearch(movieName) {
+            movieNameElement.textContent = `Searching for: ${movieName}`;
+            fetch(`/search_movie?movie_name=${movieName}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        movieInfoElement.textContent = data.error;
+                    } else {
+                        displayMovieInfo(data);
+                        speakMovieInfo(data);
+                    }
+                });
+        }
+
+        // Function to display movie information on the page
+        function displayMovieInfo(data) {
+            movieInfoElement.innerHTML = `
+                <h2>${data.title} (${data.year})</h2>
+                <p>IMDB Rating: ${data.rating}</p>
+                <p>Plot Summary: ${data.plot}</p>
+            `;
+            if (data.image_url) {
+                movieImageElement.innerHTML = `<img src="${data.image_url}" style="width: 200px; height: auto;" alt="Movie Poster">`;
+            } else {
+                movieImageElement.innerHTML = '';
+            }
+        }
+
+        // Function to handle text-to-speech using Azure Text-to-Speech
+        function speakMovieInfo(movie) {
+            const text = `Title: ${movie.title}. Year: ${movie.year}. IMDB Rating: ${movie.rating}. Plot Summary: ${movie.plot}`;
+            const utterance = new SpeechSynthesisUtterance(text);
+
+            // Set Azure Cognitive Services endpoint
+            utterance.voice = new SpeechSynthesisVoice();
+            utterance.voice.uri = azureEndpoint;
+
+            synth.speak(utterance);
+        }
+
+        // Event listener for search button click
+        searchButton.addEventListener('click', () => {
+            movieInputElement.classList.add('typing');
+            setTimeout(() => {
+                movieInputElement.classList.remove('typing');
+            }, 1000);
+            const movieName = movieInputElement.value;
+            handleSearch(movieName);
+        });
+
+        // Event listener for mic button click
+        startButton.addEventListener('click', () => {
+            startButton.classList.add('listening');
+            movieInputElement.classList.add('typing');
+            setTimeout(() => {
+                movieInputElement.classList.remove('typing');
+            }, 1000);
+
+            fetch('/get_audio')
+                .then(response => response.json())
+                .then(data => {
+                    movieNameElement.textContent = `Searching for: ${data.movie_name}`;
+                    handleSearch(data.movie_name);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                })
+                .finally(() => {
+                    startButton.classList.remove('listening');
+                });
+        });
+
+        // Handle Enter key press
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                movieInputElement.classList.add('typing');
+                setTimeout(() => {
+                    movieInputElement.classList.remove('typing');
+                }, 1000);
+                const movieName = movieInputElement.value;
+                handleSearch(movieName);
+            }
+        }
+
+        // Ensure voices are loaded before selecting one
+        window.speechSynthesis.onvoiceschanged = () => {
+            speakMovieInfo({ title: '', year: '', rating: '', plot: '' });  // Dummy call to trigger voice load
+        };
+    </script>
+</body>
+</html>
